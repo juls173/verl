@@ -826,6 +826,53 @@ def agg_loss(
 
     return loss
 
+def compute_split_kl_loss(
+    log_prob: torch.Tensor,
+    ref_log_prob: torch.Tensor,
+    response_ids: torch.Tensor,
+    response_mask: torch.Tensor,
+    think_token_id: int,
+    kl_beta_think: float = 0.0,
+    kl_beta_sol: float = 0.01,
+) -> tuple[torch.Tensor, dict]:
+    """
+    Compute a masked KL loss where tokens before </think> use kl_beta_think 
+    and tokens after use kl_beta_sol.
+
+    Args:
+        log_prob: Log probs from the current policy (batch, seq_len)
+        ref_log_prob: Log probs from the reference model (batch, seq_len)
+        response_ids: Input IDs of the response (batch, seq_len)
+        response_mask: Mask for valid tokens (batch, seq_len)
+        think_token_id: The ID of the </think> token
+        kl_beta_think: KL coefficient for the CoT
+        kl_beta_sol: KL coefficient for the post-CoT output
+    """
+    # can also use Schulman's k3
+    kl_per_token = log_prob - ref_log_prob
+    coeff_mask = torch.full_like(kl_per_token, kl_beta_sol)
+        is_think = (response_ids == think_token_id)
+    
+    batch_size, seq_len = response_ids.shape
+    for i in range(batch_size):
+        idx = (response_ids[i] == think_token_id).nonzero(as_tuple=True)[0]
+        if len(idx) > 0:
+            split_idx = idx[0]
+            coeff_mask[i, :split_idx + 1] = kl_beta_think
+        if len(idx) == 0
+    
+    weighted_kl = kl_per_token * coeff_mask
+    masked_kl_loss = verl_F.masked_mean(weighted_kl, response_mask)
+    
+    with torch.no_grad():
+        kl_mean = verl_F.masked_mean(kl_per_token, response_mask)
+    
+    metrics = {
+        "loss/kl_split": masked_kl_loss.detach().item(),
+        "val/kl_mean": kl_mean.detach().item()
+    }
+    
+    return masked_kl_loss, metrics
 
 @deprecated("verl.trainer.ppo.core_algos.compute_policy_loss_vanilla")
 def compute_policy_loss(
@@ -1501,6 +1548,7 @@ def kl_penalty_forward(logprob: torch.FloatTensor, ref_logprob: torch.FloatTenso
         raise NotImplementedError
 
     raise NotImplementedError
+
 
 
 def compute_pf_ppo_reweight_data(
