@@ -851,7 +851,7 @@ def compute_split_kl_loss(
     # can also use Schulman's k3
     kl_per_token = log_prob - ref_log_prob
     coeff_mask = torch.full_like(kl_per_token, kl_beta_sol)
-        is_think = (response_ids == think_token_id)
+    is_think = (response_ids == think_token_id)
     
     batch_size, seq_len = response_ids.shape
     for i in range(batch_size):
@@ -859,8 +859,7 @@ def compute_split_kl_loss(
         if len(idx) > 0:
             split_idx = idx[0]
             coeff_mask[i, :split_idx + 1] = kl_beta_think
-        if len(idx) == 0
-    
+
     weighted_kl = kl_per_token * coeff_mask
     masked_kl_loss = verl_F.masked_mean(weighted_kl, response_mask)
     
