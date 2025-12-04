@@ -87,6 +87,10 @@ calculate_entropy: false
 # Whether to use KL loss instead of KL reward penalty. True for GRPO
 use_kl_loss: false
 
+think_token_id: 151649
+
+kl_loss_coef_cot: -0.001
+
 # Whether to use torch.compile()
 # oc.select: the default val for ref.use_torch_compile
 use_torch_compile: true
