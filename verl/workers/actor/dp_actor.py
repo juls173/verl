@@ -27,7 +27,7 @@ from torch.distributed.tensor import DTensor
 
 import verl.utils.torch_functional as verl_F
 from verl import DataProto
-from verl.trainer.ppo.core_algos import agg_loss, get_policy_loss_fn, kl_penalty
+from verl.trainer.ppo.core_algos import agg_loss, get_policy_loss_fn, kl_penalty, compute_split_kl_loss
 from verl.utils.attention_utils import index_first_axis, pad_input, rearrange, unpad_input
 from verl.utils.device import get_device_id, get_device_name
 from verl.utils.fsdp_utils import FSDPModule, fsdp2_clip_grad_norm_
@@ -521,17 +521,38 @@ class DataParallelPPOActor(BasePPOActor):
                         if entropy_coeff != 0:
                             policy_loss -= entropy_agg * entropy_coeff
 
+                    # if self.config.use_kl_loss:
+                    #     ref_log_prob = model_inputs["ref_log_prob"]
+                    #     # compute kl loss
+                    #     kld = kl_penalty(
+                    #         logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type
+                    #     )
+                    #     kl_loss = agg_loss(loss_mat=kld, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+
+                    #     policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
+                    #     micro_batch_metrics["actor/kl_loss"] = kl_loss.detach().item() * loss_scale_factor
+                    #     micro_batch_metrics["actor/kl_coef"] = self.config.kl_loss_coef
                     if self.config.use_kl_loss:
                         ref_log_prob = model_inputs["ref_log_prob"]
-                        # compute kl loss
-                        kld = kl_penalty(
-                            logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type
+                        
+                        kl_loss, kl_metrics = compute_split_kl_loss(
+                            log_prob=log_prob,
+                            ref_log_prob=ref_log_prob,
+                            response_ids=model_inputs["responses"], 
+                            response_mask=response_mask,
+                            think_token_id=self.config.think_token_id,
+                            kl_penalty_type=self.config.kl_loss_type,
+                            kl_beta_think=self.config.kl_loss_coef_cot
+                            kl_beta_sol=self.config.kl_loss_coef, 
+                            loss_agg_mode=loss_agg_mode,
+                            config=self.config
                         )
-                        kl_loss = agg_loss(loss_mat=kld, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
 
-                        policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
+                        policy_loss = policy_loss + kl_loss
+                        
                         micro_batch_metrics["actor/kl_loss"] = kl_loss.detach().item() * loss_scale_factor
                         micro_batch_metrics["actor/kl_coef"] = self.config.kl_loss_coef
+                        micro_batch_metrics.update(kl_metrics) # Add the split specific metrics
 
                     if self.config.use_dynamic_bsz:
                         # relative to the dynamic bsz
