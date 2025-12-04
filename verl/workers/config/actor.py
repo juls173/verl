@@ -116,7 +116,7 @@ class ActorConfig(BaseConfig):
     use_kl_loss: bool = False
     use_torch_compile: bool = True
     kl_loss_coef: float = 0.001
-    kl_loss_coef_think: float = 0.0
+    kl_loss_coef_cot: float = 0.0
     think_token_id: int = 151649
     kl_loss_type: str = "low_var_kl"
     ppo_epochs: int = 1
